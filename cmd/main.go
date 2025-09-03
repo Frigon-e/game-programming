@@ -1,7 +1,7 @@
 package main
 
 import (
-	"SideProjectGames/gameoflife"
+	"SideProjectGames/battleship"
 	"SideProjectGames/internal/config"
 	"fmt"
 	"os"
@@ -24,7 +24,7 @@ func run() (err error) {
 		return err
 	}
 
-	if err := gameoflife.Run(cfg); err != nil {
+	if err := battleship.Run(cfg); err != nil {
 		return err
 	}
 

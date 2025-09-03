@@ -8,8 +8,10 @@ import (
 )
 
 type AppConfig struct {
-	GOLWIDTH  int
-	GOLHEIGHT int
+	GOLWIDTH         int
+	GOLHEIGHT        int
+	BATTLESHIPWIDTH  int
+	BATTLESHIPHEIGHT int
 }
 
 func InitConfig() (cfg AppConfig, err error) {
