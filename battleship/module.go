@@ -24,12 +24,14 @@ var (
 // This mirrors the Game of Life loop structure and prepares for separate User and AI boards.
 func Run(cfg config.AppConfig) error {
 	g := &game{
-		cellSize:  80,
-		stepEvery: time.Millisecond * 100, // kept for consistency; not used yet for turn timing
-		rows:      cfg.BATTLESHIPHEIGHT,
-		cols:      cfg.BATTLESHIPWIDTH,
-		userBoard: application.NewBattleshipBoard(cfg.BATTLESHIPWIDTH, cfg.BATTLESHIPHEIGHT),
-		aiBoard:   application.NewBattleshipBoard(cfg.BATTLESHIPWIDTH, cfg.BATTLESHIPHEIGHT),
+		cellSize:     80,
+		stepEvery:    time.Millisecond * 100, // kept for consistency; not used yet for turn timing
+		rows:         cfg.BATTLESHIPHEIGHT,
+		cols:         cfg.BATTLESHIPWIDTH,
+		userBoard:    application.NewBattleshipBoard(cfg.BATTLESHIPWIDTH, cfg.BATTLESHIPHEIGHT),
+		aiBoard:      application.NewBattleshipBoard(cfg.BATTLESHIPWIDTH, cfg.BATTLESHIPHEIGHT),
+		isPlayerTurn: true,
+		ai:           application.NewSimpleAI(cfg.BATTLESHIPWIDTH, cfg.BATTLESHIPHEIGHT),
 	}
 
 	s, err := text.NewGoTextFaceSource(bytes.NewReader(fonts.MPlus1pRegular_ttf))
@@ -40,12 +42,12 @@ func Run(cfg config.AppConfig) error {
 
 	g.aiBoard.SeedBoard()
 	g.aiBoard.PrintBoard()
-	// Layout: two boards side-by-side with a gap
+	// Layout: two boards stacked vertically with a gap
 	gap := 20
 	boardW := g.cols * g.cellSize
 	boardH := g.rows * g.cellSize
-	w := boardW*2 + gap
-	h := boardH
+	w := boardW
+	h := boardH*2 + gap
 	ebiten.SetWindowSize(w, h)
 	ebiten.SetWindowTitle("Battleship")
 
@@ -53,16 +55,22 @@ func Run(cfg config.AppConfig) error {
 }
 
 type game struct {
-	rows, cols int
-	cellSize   int
-	stepEvery  time.Duration
-	lastStep   time.Time
-	userBoard  application.BattleshipBoard
-	aiBoard    application.BattleshipBoard
+	rows, cols    int
+	cellSize      int
+	stepEvery     time.Duration
+	lastStep      time.Time
+	userBoard     application.BattleshipBoard
+	aiBoard       application.BattleshipBoard
+	isPlayerTurn bool
+	ai            application.AI
 }
 
 func (g *game) Update() error {
-	g.handleClick()
+	if g.isPlayerTurn {
+		g.handleClick()
+	} else {
+		g.step()
+	}
 	return nil
 }
 
@@ -99,9 +107,9 @@ func (g *game) Draw(screen *ebiten.Image) {
 		}
 	}
 
-	// Draw AI board (right)
-	offsetX := boardW + gap
-	drawGrid(screen, offsetX, 0, g.cols, g.rows, cs, grid)
+	// Draw AI board (bottom)
+	offsetY := boardW + gap
+	drawGrid(screen, 0, offsetY, g.cols, g.rows, cs, grid)
 	// Draw user shots on AI board
 	for x := 0; x < g.cols; x++ {
 		for y := 0; y < g.rows; y++ {
@@ -113,16 +121,16 @@ func (g *game) Draw(screen *ebiten.Image) {
 				chosenColor = shotColor
 			}
 
-			xPix := offsetX + x*cs + 1
-			yPix := y*cs + 1
+			xPix := x*cs + 1
+			yPix := offsetY + y*cs + 1
 			vector.DrawFilledRect(screen, float32(xPix), float32(yPix), float32(cs-2), float32(cs-2), chosenColor, false)
 		}
 	}
 
 	// UI text
-	msg := fmt.Sprintf("User board | AI board   Cells: %dx%d  CellSize: %d", g.cols, g.rows, g.cellSize)
+	msg := fmt.Sprintf("User board (top) | AI board (bottom)   Cells: %dx%d  CellSize: %d", g.cols, g.rows, g.cellSize)
 	op := &text.DrawOptions{}
-	op.GeoM.Translate(10, float64(g.rows*g.cellSize-28))
+	op.GeoM.Translate(10, float64(g.rows*g.cellSize*2+gap-28))
 	op.ColorScale.ScaleWithColor(color.RGBA{0, 0, 0, 255})
 	text.Draw(screen, msg, &text.GoTextFace{Source: mplusFaceSource, Size: 18}, op)
 }
@@ -147,19 +155,22 @@ func (g *game) handleClick() {
 	if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
 		cs := g.cellSize
 		boardW := g.cols * cs
+		boardH := g.rows * cs
 		gap := 20
-		offsetX := boardW + gap
+		offsetY := boardH + gap
 
-		// Check if click is on AI board (right)
-		if mouseX >= offsetX && mouseX < offsetX+boardW && mouseY >= 0 && mouseY < g.rows*cs {
-			gridX := (mouseX - offsetX) / cs
-			gridY := mouseY / cs
+		// Check if click is on AI board (bottom)
+		if mouseX >= 0 && mouseX < boardW && mouseY >= offsetY && mouseY < offsetY+boardH {
+			gridX := mouseX / cs
+			gridY := (mouseY - offsetY) / cs
 			key := [2]int{gridX, gridY}
 			// Toggle a placeholder shot state; hit simulation toggles true/false
 			hit, sunk, err := g.aiBoard.Attack(key[0], key[1])
 
 			if err != nil {
 				fmt.Println("Error: ", err)
+			} else {
+				g.isPlayerTurn = false
 			}
 			if hit {
 				fmt.Println("Hit!")
@@ -173,5 +184,11 @@ func (g *game) handleClick() {
 }
 
 func (g *game) step() {
-	// Placeholder for future turn/AI updates
+	time.Sleep(500 * time.Millisecond) // Add a small delay for the AI's turn
+	x, y := g.ai.TakeTurn(g.userBoard)
+	_, _, err := g.userBoard.Attack(x, y)
+	if err != nil {
+		fmt.Println("AI error: ", err)
+	}
+	g.isPlayerTurn = true
 }
