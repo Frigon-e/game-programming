@@ -24,7 +24,7 @@ var (
 // This mirrors the Game of Life loop structure and prepares for separate User and AI boards.
 func Run(cfg config.AppConfig) error {
 	g := &game{
-		cellSize:     80,
+		cellSize:     50,
 		stepEvery:    time.Millisecond * 100, // kept for consistency; not used yet for turn timing
 		rows:         cfg.BATTLESHIPHEIGHT,
 		cols:         cfg.BATTLESHIPWIDTH,
@@ -55,17 +55,22 @@ func Run(cfg config.AppConfig) error {
 }
 
 type game struct {
-	rows, cols    int
-	cellSize      int
-	stepEvery     time.Duration
-	lastStep      time.Time
-	userBoard     application.BattleshipBoard
-	aiBoard       application.BattleshipBoard
+	rows, cols   int
+	cellSize     int
+	stepEvery    time.Duration
+	lastStep     time.Time
+	userBoard    application.BattleshipBoard
+	aiBoard      application.BattleshipBoard
 	isPlayerTurn bool
-	ai            application.AI
+	ai           application.AI
+	gameOver     bool
+	winner       string
 }
 
 func (g *game) Update() error {
+	if g.gameOver {
+		return nil
+	}
 	if g.isPlayerTurn {
 		g.handleClick()
 	} else {
@@ -80,17 +85,18 @@ func applyAlpha(c color.Color, alpha uint8) color.Color {
 }
 
 func (g *game) Draw(screen *ebiten.Image) {
-	// Clear
-	screen.Fill(color.RGBA{R: 44, G: 62, B: 80, A: 255})
-
 	// Colors
-	grid := color.RGBA{R: 189, G: 195, B: 199, A: 255}
-	userColor := color.RGBA{R: 52, G: 152, B: 219, A: 255}
-	shotColor := color.RGBA{R: 231, G: 76, B: 60, A: 255}
-	missColor := color.RGBA{R: 149, G: 165, B: 166, A: 255}
+	bgColor := color.RGBA{R: 20, G: 30, B: 40, A: 255}
+	gridColor := color.RGBA{R: 160, G: 170, B: 180, A: 255}
+	hitColor := color.RGBA{R: 255, G: 100, B: 30, A: 255}
+	missColor := color.RGBA{R: 40, G: 60, B: 80, A: 255}
+	sunkColor := color.RGBA{R: 180, G: 30, B: 180, A: 255}
+
+	// Clear
+	screen.Fill(bgColor)
 
 	cs := g.cellSize
-	boardW := g.cols * cs
+	boardH := g.rows * cs
 	gap := 20
 
 	// Determine opacity based on whose turn it is
@@ -103,41 +109,71 @@ func (g *game) Draw(screen *ebiten.Image) {
 	}
 
 	// Draw user board (top)
-	drawGrid(screen, 0, 0, g.cols, g.rows, cs, applyAlpha(grid, userBoardAlpha))
+	drawGrid(screen, 0, 0, g.cols, g.rows, cs, applyAlpha(gridColor, userBoardAlpha))
 	for x := 0; x < g.cols; x++ {
 		for y := 0; y < g.rows; y++ {
 			var chosenColor color.Color
-			switch g.userBoard.Coordinate(x, y) {
+			cell := g.userBoard.Coordinate(x, y)
+			switch cell {
 			case application.Hit:
-				chosenColor = shotColor
+				if g.userBoard.IsCellSunk(x, y) {
+					chosenColor = sunkColor
+				} else {
+					chosenColor = hitColor
+				}
 			case application.Miss:
 				chosenColor = missColor
 			default:
-				chosenColor = userColor
+				chosenColor = bgColor
 			}
 			xPix := x*cs + 1
 			yPix := y*cs + 1
 			vector.DrawFilledRect(screen, float32(xPix), float32(yPix), float32(cs-2), float32(cs-2), applyAlpha(chosenColor, userBoardAlpha), false)
+			// Draw X overlay for sunk cells
+			if cell == application.Hit && g.userBoard.IsCellSunk(x, y) {
+				lineCol := applyAlpha(color.RGBA{R: 255, G: 255, B: 255, A: 255}, userBoardAlpha)
+				x1 := float32(xPix + 2)
+				y1 := float32(yPix + 2)
+				x2 := float32(xPix + cs - 3)
+				y2 := float32(yPix + cs - 3)
+				vector.StrokeLine(screen, x1, y1, x2, y2, 2, lineCol, false)
+				vector.StrokeLine(screen, x1, y2, x2, y1, 2, lineCol, false)
+			}
 		}
 	}
 
 	// Draw AI board (bottom)
-	offsetY := boardW + gap // Corrected from boardW to boardH
-	drawGrid(screen, 0, offsetY, g.cols, g.rows, cs, applyAlpha(grid, aiBoardAlpha))
+	offsetY := boardH + gap
+	drawGrid(screen, 0, offsetY, g.cols, g.rows, cs, applyAlpha(gridColor, aiBoardAlpha))
 	for x := 0; x < g.cols; x++ {
 		for y := 0; y < g.rows; y++ {
 			var chosenColor color.Color
-			switch g.aiBoard.Coordinate(x, y) {
+			cell := g.aiBoard.Coordinate(x, y)
+			switch cell {
 			case application.Hit:
-				chosenColor = shotColor
+				if g.aiBoard.IsCellSunk(x, y) {
+					chosenColor = sunkColor
+				} else {
+					chosenColor = hitColor
+				}
 			case application.Miss:
 				chosenColor = missColor
 			default:
-				chosenColor = userColor
+				chosenColor = bgColor
 			}
 			xPix := x*cs + 1
 			yPix := offsetY + y*cs + 1
 			vector.DrawFilledRect(screen, float32(xPix), float32(yPix), float32(cs-2), float32(cs-2), applyAlpha(chosenColor, aiBoardAlpha), false)
+			// Draw X overlay for sunk cells
+			if cell == application.Hit && g.aiBoard.IsCellSunk(x, y) {
+				lineCol := applyAlpha(color.RGBA{255, 255, 255, 255}, aiBoardAlpha)
+				x1 := float32(xPix + 2)
+				y1 := float32(yPix + 2)
+				x2 := float32(xPix + cs - 3)
+				y2 := float32(yPix + cs - 3)
+				vector.StrokeLine(screen, x1, y1, x2, y2, 2, lineCol, false)
+				vector.StrokeLine(screen, x1, y2, x2, y1, 2, lineCol, false)
+			}
 		}
 	}
 
@@ -147,6 +183,15 @@ func (g *game) Draw(screen *ebiten.Image) {
 	op.GeoM.Translate(10, float64(g.rows*g.cellSize*2+gap-28))
 	op.ColorScale.ScaleWithColor(color.RGBA{0, 0, 0, 255})
 	text.Draw(screen, msg, &text.GoTextFace{Source: mplusFaceSource, Size: 18}, op)
+
+	// Game over message
+	if g.gameOver {
+		winnerMsg := fmt.Sprintf("Game Over - %s wins!", g.winner)
+		op2 := &text.DrawOptions{}
+		op2.GeoM.Translate(10, float64(g.rows*g.cellSize*2+gap-56))
+		op2.ColorScale.ScaleWithColor(color.RGBA{255, 255, 255, 255})
+		text.Draw(screen, winnerMsg, &text.GoTextFace{Source: mplusFaceSource, Size: 24}, op2)
+	}
 }
 
 func drawGrid(screen *ebiten.Image, offsetX, offsetY, cols, rows, cellSize int, col color.Color) {
@@ -164,8 +209,8 @@ func (g *game) Layout(outsideWidth, outsideHeight int) (int, int) {
 }
 
 func (g *game) handleClick() {
-	if !g.isPlayerTurn {
-		return // Ignore clicks if it's not the player's turn
+	if g.gameOver || !g.isPlayerTurn {
+		return // Ignore clicks if it's not the player's turn or game is over
 	}
 	mouseX, mouseY := ebiten.CursorPosition()
 
@@ -180,9 +225,8 @@ func (g *game) handleClick() {
 		if mouseX >= 0 && mouseX < boardW && mouseY >= offsetY && mouseY < offsetY+boardH {
 			gridX := mouseX / cs
 			gridY := (mouseY - offsetY) / cs
-			key := [2]int{gridX, gridY}
 			// Toggle a placeholder shot state; hit simulation toggles true/false
-			hit, sunk, err := g.aiBoard.Attack(key[0], key[1])
+			hit, sunk, err := g.aiBoard.Attack(gridX, gridY)
 
 			if err != nil {
 				fmt.Println("Error: ", err)
@@ -195,6 +239,10 @@ func (g *game) handleClick() {
 			}
 			if sunk {
 				fmt.Println("Sunk!")
+				if g.aiBoard.AllShipsSunk() {
+					g.gameOver = true
+					g.winner = "Player"
+				}
 			}
 
 		}
@@ -202,11 +250,25 @@ func (g *game) handleClick() {
 }
 
 func (g *game) step() {
+	if g.gameOver {
+		return
+	}
 	time.Sleep(500 * time.Millisecond) // Add a small delay for the AI's turn
 	x, y := g.ai.TakeTurn(g.userBoard)
-	_, _, err := g.userBoard.Attack(x, y)
+	hit, sunk, err := g.userBoard.Attack(x, y)
 	if err != nil {
 		fmt.Println("AI error: ", err)
+		g.isPlayerTurn = true
+		return
 	}
+	if sunk {
+		if g.userBoard.AllShipsSunk() {
+			g.gameOver = true
+			g.winner = "AI"
+			return
+		}
+	}
+	// After AI move, return control to player
 	g.isPlayerTurn = true
+	_ = hit // currently not used to control extra turns
 }

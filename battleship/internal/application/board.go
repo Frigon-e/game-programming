@@ -29,11 +29,14 @@ type BattleshipBoard interface {
 	SeedBoard()
 	Attack(x, y int) (hit, sunk bool, err error)
 	PlaceShip(x int, y int, shipType uint8, orientation uint8) bool
+	IsCellSunk(x, y int) bool
+	AllShipsSunk() bool
 }
 
 type battleshipBoard struct {
 	ddd.Board[uint8] // embed the generic board to reuse its methods
 	sunkShips        map[uint8]bool
+	hitShipAt        map[[2]int]uint8 // track which ship type was hit at a coordinate
 }
 
 var _ BattleshipBoard = (*battleshipBoard)(nil)
@@ -49,7 +52,7 @@ func newBattleshipBoard(width int, height int) BattleshipBoard {
 		Cruiser:    false,
 		Submarine:  false,
 		Destroyer:  false,
-	}}
+	}, hitShipAt: make(map[[2]int]uint8)}
 }
 
 func (b *battleshipBoard) PlaceShip(x int, y int, shipType uint8, orientation uint8) bool {
@@ -93,6 +96,21 @@ func (b *battleshipBoard) SeedBoard() {
 	for x := 0; x < b.Cols(); x++ {
 		for y := 0; y < b.Rows(); y++ {
 			b.SetCoordinate(x, y, 0)
+		}
+	}
+	// reset sunkShips and hitShipAt tracking
+	b.sunkShips = map[uint8]bool{
+		Carrier:    false,
+		Battleship: false,
+		Cruiser:    false,
+		Submarine:  false,
+		Destroyer:  false,
+	}
+	if b.hitShipAt == nil {
+		b.hitShipAt = make(map[[2]int]uint8)
+	} else {
+		for k := range b.hitShipAt {
+			delete(b.hitShipAt, k)
 		}
 	}
 	// place ships randomly
@@ -162,6 +180,8 @@ func (b *battleshipBoard) Attack(x, y int) (hit, sunk bool, err error) {
 		b.SetCoordinate(x, y, Miss)
 		return false, false, nil
 	}
+	// record which ship type was hit at this location before overwriting the cell value
+	b.hitShipAt[[2]int{x, y}] = currentValue
 	b.SetCoordinate(x, y, Hit)
 	sunk, err = b.IsShipSunk(currentValue)
 	if err != nil {
@@ -185,4 +205,28 @@ func shipLength(shipType uint8) int {
 	default:
 		return 0
 	}
+}
+
+func (b *battleshipBoard) IsCellSunk(x, y int) bool {
+	// Only a hit cell can be considered for sunk visualization
+	if b.Coordinate(x, y) != Hit {
+		return false
+	}
+	ship, ok := b.hitShipAt[[2]int{x, y}]
+	if !ok {
+		return false
+	}
+	sunk, _ := b.IsShipSunk(ship)
+	return sunk
+}
+
+func (b *battleshipBoard) AllShipsSunk() bool {
+	shipTypes := []uint8{Carrier, Battleship, Cruiser, Submarine, Destroyer}
+	for _, st := range shipTypes {
+		sunk, _ := b.IsShipSunk(st)
+		if !sunk {
+			return false
+		}
+	}
+	return true
 }
