@@ -74,56 +74,70 @@ func (g *game) Update() error {
 	return nil
 }
 
+func applyAlpha(c color.Color, alpha uint8) color.Color {
+	r, g, b, _ := c.RGBA()
+	return color.RGBA{R: uint8(r >> 8), G: uint8(g >> 8), B: uint8(b >> 8), A: alpha}
+}
+
 func (g *game) Draw(screen *ebiten.Image) {
 	// Clear
-	screen.Fill(color.RGBA{A: 255})
+	screen.Fill(color.RGBA{R: 44, G: 62, B: 80, A: 255})
 
 	// Colors
-	grid := color.RGBA{R: 220, G: 220, B: 220, A: 255}
-	userColor := color.RGBA{R: 200, G: 230, B: 255, A: 255}
-	shotColor := color.RGBA{R: 255, G: 80, B: 80, A: 255}
-	missColor := color.RGBA{R: 120, G: 120, B: 120, A: 255}
+	grid := color.RGBA{R: 189, G: 195, B: 199, A: 255}
+	userColor := color.RGBA{R: 52, G: 152, B: 219, A: 255}
+	shotColor := color.RGBA{R: 231, G: 76, B: 60, A: 255}
+	missColor := color.RGBA{R: 149, G: 165, B: 166, A: 255}
 
 	cs := g.cellSize
 	boardW := g.cols * cs
 	gap := 20
 
-	// Draw user board (left)
-	drawGrid(screen, 0, 0, g.cols, g.rows, cs, grid)
-	// Fill any AI shots on user board (placeholder: none yet)
+	// Determine opacity based on whose turn it is
+	userBoardAlpha := uint8(255)
+	aiBoardAlpha := uint8(255)
+	if g.isPlayerTurn {
+		aiBoardAlpha = 128 // Dim the AI board if it's the player's turn
+	} else {
+		userBoardAlpha = 128 // Dim the user board if it's the AI's turn
+	}
+
+	// Draw user board (top)
+	drawGrid(screen, 0, 0, g.cols, g.rows, cs, applyAlpha(grid, userBoardAlpha))
 	for x := 0; x < g.cols; x++ {
 		for y := 0; y < g.rows; y++ {
-			chosenColor := userColor
-			if g.userBoard.Coordinate(x, y) == application.Miss {
-				chosenColor = missColor
-			}
-			if g.userBoard.Coordinate(x, y) == application.Hit {
+			var chosenColor color.Color
+			switch g.userBoard.Coordinate(x, y) {
+			case application.Hit:
 				chosenColor = shotColor
+			case application.Miss:
+				chosenColor = missColor
+			default:
+				chosenColor = userColor
 			}
-
 			xPix := x*cs + 1
 			yPix := y*cs + 1
-			vector.DrawFilledRect(screen, float32(xPix), float32(yPix), float32(cs-2), float32(cs-2), chosenColor, false)
+			vector.DrawFilledRect(screen, float32(xPix), float32(yPix), float32(cs-2), float32(cs-2), applyAlpha(chosenColor, userBoardAlpha), false)
 		}
 	}
 
 	// Draw AI board (bottom)
-	offsetY := boardW + gap
-	drawGrid(screen, 0, offsetY, g.cols, g.rows, cs, grid)
-	// Draw user shots on AI board
+	offsetY := boardW + gap // Corrected from boardW to boardH
+	drawGrid(screen, 0, offsetY, g.cols, g.rows, cs, applyAlpha(grid, aiBoardAlpha))
 	for x := 0; x < g.cols; x++ {
 		for y := 0; y < g.rows; y++ {
-			chosenColor := userColor
-			if g.aiBoard.Coordinate(x, y) == application.Miss {
-				chosenColor = missColor
-			}
-			if g.aiBoard.Coordinate(x, y) == application.Hit {
+			var chosenColor color.Color
+			switch g.aiBoard.Coordinate(x, y) {
+			case application.Hit:
 				chosenColor = shotColor
+			case application.Miss:
+				chosenColor = missColor
+			default:
+				chosenColor = userColor
 			}
-
 			xPix := x*cs + 1
 			yPix := offsetY + y*cs + 1
-			vector.DrawFilledRect(screen, float32(xPix), float32(yPix), float32(cs-2), float32(cs-2), chosenColor, false)
+			vector.DrawFilledRect(screen, float32(xPix), float32(yPix), float32(cs-2), float32(cs-2), applyAlpha(chosenColor, aiBoardAlpha), false)
 		}
 	}
 
@@ -150,6 +164,9 @@ func (g *game) Layout(outsideWidth, outsideHeight int) (int, int) {
 }
 
 func (g *game) handleClick() {
+	if !g.isPlayerTurn {
+		return // Ignore clicks if it's not the player's turn
+	}
 	mouseX, mouseY := ebiten.CursorPosition()
 
 	if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
