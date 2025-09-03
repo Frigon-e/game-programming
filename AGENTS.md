@@ -1,31 +1,42 @@
-# Game of Life Agent Guide
+# Agent Guide: SideProjectGames
 
-Welcome, agent! This guide will help you contribute to the Game of Life project.
+Welcome, agent! This guide will help you contribute to the SideProjectGames repository.
 
 ## Project Overview
 
-This project is a simulation of Conway's Game of Life, built in Go using the Ebiten 2D game engine. The core game logic is separated from the rendering and application startup.
+This project is a collection of small game modules written in Go, using the Ebiten 2D game engine for rendering. The goal is to create a modular system where different games can be developed and run from a common entry point.
+
+The currently implemented modules are:
+1.  **Conway's Game of Life**: An interactive cellular automaton.
+2.  **Battleship**: A classic board game against a simple AI.
 
 ### Directory Structure
 
-- `cmd/main.go`: The main entry point for the application.
+- `cmd/main.go`: The main entry point for the application. It reads the `MODULE` environment variable to decide which game to run.
 - `gameoflife/`: Contains the primary module for the Game of Life simulation.
-- `gameoflife/internal/ddd/board.go`: Defines the game board and its core logic, such as counting live neighbors.
+- `battleship/`: Contains the primary module for the Battleship game.
+- `internal/`: Holds shared code, including configuration and a generic board implementation.
 - `go.mod`, `go.sum`: Manage the project's dependencies.
 
 ## Development
 
 ### Running the Application
 
-To run the Game of Life simulation, execute the following command from the root directory:
+To run a specific game module, you must set the `MODULE` environment variable.
 
+**To run the Game of Life simulation:**
 ```bash
-go run cmd/main.go
+MODULE=GOL go run ./cmd/main.go
+```
+
+**To run the Battleship game:**
+```bash
+MODULE=BATTLESHIP go run ./cmd/main.go
 ```
 
 ### Running Tests
 
-To run the unit tests, use the following command:
+To run all unit tests for the project, use the following command from the root directory:
 
 ```bash
 go test ./...
