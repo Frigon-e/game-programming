@@ -45,7 +45,11 @@ func TestAttack_Miss(t *testing.T) {
 
 func TestAttack_Invalid(t *testing.T) {
 	board := newBattleshipBoard(10, 10)
-	board.Attack(0, 0) // First attack
+
+	_, _, err2 := board.Attack(0, 0)
+	if err2 != nil {
+		return
+	}
 
 	hit, sunk, err := board.Attack(0, 0) // Second attack on the same cell
 
@@ -64,7 +68,11 @@ func TestAttack_Sunk(t *testing.T) {
 	board := newBattleshipBoard(10, 10)
 	board.PlaceShip(0, 0, Destroyer, Horizontal) // Destroyer has length 2
 
-	board.Attack(0, 0)
+	_, _, err2 := board.Attack(0, 0)
+	if err2 != nil {
+		return
+	}
+
 	hit, sunk, err := board.Attack(1, 0)
 
 	if err != nil {
