@@ -28,6 +28,7 @@ type BattleshipBoard interface {
 	ddd.Board[uint8]
 	SeedBoard()
 	Attack(x, y int) (hit, sunk bool, err error)
+	PlaceShip(x int, y int, shipType uint8, orientation uint8) bool
 }
 
 type battleshipBoard struct {
