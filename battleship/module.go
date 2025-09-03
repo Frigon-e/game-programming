@@ -169,9 +169,10 @@ func (g *game) handleClick() {
 
 			if err != nil {
 				fmt.Println("Error: ", err)
-			} else {
+			} else if !hit {
 				g.isPlayerTurn = false
 			}
+
 			if hit {
 				fmt.Println("Hit!")
 			}
