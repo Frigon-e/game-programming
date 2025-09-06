@@ -34,29 +34,27 @@ func newBoard[T any](width int, height int) Board[T] {
 }
 
 func (b *board[T]) CopyBoard(writeSlice []T) {
-	for index := 0; index < len(b.flatSlice); index++ {
-		b.flatSlice[index] = writeSlice[index]
-	}
+	copy(b.flatSlice, writeSlice)
 }
 
 func (b *board[T]) Coordinate(x int, y int) T {
-	newRow := (x + b.rows) % b.rows
-	newCol := (y + b.cols) % b.cols
+	row := (y + b.rows) % b.rows
+	col := (x + b.cols) % b.cols
 
-	return b.flatSlice[(newRow*b.rows)+newCol]
+	return b.flatSlice[(row*b.cols)+col]
 }
 
 func (b *board[T]) SetCoordinate(x int, y int, value T) {
-	newRow := (x + b.rows) % b.rows
-	newCol := (y + b.cols) % b.cols
+	row := (y + b.rows) % b.rows
+	col := (x + b.cols) % b.cols
 
-	b.flatSlice[(newRow*b.rows)+newCol] = value
+	b.flatSlice[(row*b.cols)+col] = value
 }
 
 func (b *board[T]) PrintBoard() {
-	for row := 0; row < b.rows; row++ {
-		for col := 0; col < b.cols; col++ {
-			fmt.Print(b.Coordinate(row, col))
+	for y := 0; y < b.rows; y++ {
+		for x := 0; x < b.cols; x++ {
+			fmt.Print(b.Coordinate(x, y))
 		}
 		fmt.Println()
 	}

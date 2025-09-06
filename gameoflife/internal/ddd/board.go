@@ -7,8 +7,6 @@ import (
 )
 
 // GolBoard composes the generic ddd.Board with extra Game of Life helpers.
-// In Go, we "inherit" behavior by embedding interfaces/structs (composition),
-// not by classical inheritance.
 type GolBoard interface {
 	ddd.Board[bool]
 	SeedBoard()
@@ -32,13 +30,13 @@ func newGOLBoard(width int, height int) GolBoard {
 func (b *golBoard) CountSurroundingLive(x int, y int) int {
 	surroundArray := []int{-1, 0, 1}
 	totalAlive := 0
-	for _, rowOffset := range surroundArray {
-		for _, colOffset := range surroundArray {
-			if rowOffset == 0 && colOffset == 0 {
+	for _, yOffset := range surroundArray {
+		for _, xOffset := range surroundArray {
+			if yOffset == 0 && xOffset == 0 {
 				continue
 			}
 
-			if b.Coordinate(x+rowOffset, y+colOffset) {
+			if b.Coordinate(x+xOffset, y+yOffset) {
 				totalAlive += 1
 			}
 		}
@@ -49,10 +47,8 @@ func (b *golBoard) CountSurroundingLive(x int, y int) int {
 
 func (b *golBoard) SeedBoard() {
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	// Work on a copy then write back via CopyBoard to respect encapsulation
 	slice := b.FlatSlice()
 	for i := 0; i < len(slice); i++ {
-		// Rough 50/50 seed; adjust as desired
 		slice[i] = r.Intn(2) == 1
 	}
 	b.CopyBoard(slice)

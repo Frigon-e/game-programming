@@ -31,7 +31,7 @@ func Run(cfg config.AppConfig) error {
 		userBoard:    application.NewBattleshipBoard(cfg.BATTLESHIPWIDTH, cfg.BATTLESHIPHEIGHT),
 		aiBoard:      application.NewBattleshipBoard(cfg.BATTLESHIPWIDTH, cfg.BATTLESHIPHEIGHT),
 		isPlayerTurn: true,
-		ai:           application.NewSimpleAI(cfg.BATTLESHIPWIDTH, cfg.BATTLESHIPHEIGHT),
+		ai:           application.NewHeatMapAI(cfg.BATTLESHIPWIDTH, cfg.BATTLESHIPHEIGHT),
 	}
 
 	s, err := text.NewGoTextFaceSource(bytes.NewReader(fonts.MPlus1pRegular_ttf))

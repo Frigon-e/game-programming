@@ -30,6 +30,7 @@ type BattleshipBoard interface {
 	Attack(x, y int) (hit, sunk bool, err error)
 	PlaceShip(x int, y int, shipType uint8, orientation uint8) bool
 	IsCellSunk(x, y int) bool
+	IsShipSunk(ship uint8) (sunk bool, err error)
 	AllShipsSunk() bool
 }
 
@@ -57,7 +58,7 @@ func newBattleshipBoard(width int, height int) BattleshipBoard {
 
 func (b *battleshipBoard) PlaceShip(x int, y int, shipType uint8, orientation uint8) bool {
 	// Determine the length of the ship from the ship type
-	length := shipLength(shipType)
+	length := ShipLength(shipType)
 	if canPlace := b.CanPlace(x, y, length, orientation); !canPlace {
 		fmt.Println("Warning: cannot place ship at", x, y, "with length", length, "and orientation", orientation)
 		return false
@@ -190,7 +191,7 @@ func (b *battleshipBoard) Attack(x, y int) (hit, sunk bool, err error) {
 	return true, sunk, nil
 }
 
-func shipLength(shipType uint8) int {
+func ShipLength(shipType uint8) int {
 	switch shipType {
 	case Carrier:
 		return 5

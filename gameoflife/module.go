@@ -87,13 +87,13 @@ func (g *game) Draw(screen *ebiten.Image) {
 	// Draw alive cells as white rectangles
 	cs := g.cellSize
 	white := color.RGBA{R: 255, G: 255, B: 255, A: 255}
-	for r := 0; r < g.read.Rows(); r++ {
-		for c := 0; c < g.read.Cols(); c++ {
-			if g.read.Coordinate(r, c) {
-				x := c * cs
-				y := r * cs
+	for y := 0; y < g.read.Rows(); y++ {
+		for x := 0; x < g.read.Cols(); x++ {
+			if g.read.Coordinate(x, y) { // Corrected: Coordinate(x, y)
+				xPix := x * cs
+				yPix := y * cs
 
-				vector.DrawFilledRect(screen, float32(x), float32(y), float32(cs-1), float32(cs-1), white, false)
+				vector.DrawFilledRect(screen, float32(xPix), float32(yPix), float32(cs-1), float32(cs-1), white, false)
 			}
 		}
 	}
@@ -128,11 +128,10 @@ func (g *game) handleClick() {
 
 		if gridX >= 0 && gridX < g.read.Cols() && gridY >= 0 && gridY < g.read.Rows() {
 			g.addSkippable(skippableItems{int16(gridY), int16(gridX)})
-			current := g.read.Coordinate(gridY, gridX)
+			current := g.read.Coordinate(gridX, gridY) // Corrected: Coordinate(gridX, gridY)
 			val := !current
-			g.write.SetCoordinate(gridY, gridX, val)
-			g.read.SetCoordinate(gridY, gridX, val)
-
+			g.write.SetCoordinate(gridX, gridY, val) // Corrected: SetCoordinate(gridX, gridY)
+			g.read.SetCoordinate(gridX, gridY, val)  // Corrected: SetCoordinate(gridX, gridY)
 		}
 	}
 
@@ -151,11 +150,11 @@ func (g *game) handleClick() {
 
 func (g *game) step() {
 	// Apply Conway rules from read -> write, then copy back
-	for r := 0; r < g.read.Rows(); r++ {
-		for c := 0; c < g.read.Cols(); c++ {
+	for y := 0; y < g.read.Rows(); y++ {
+		for x := 0; x < g.read.Cols(); x++ { // Corrected: Iterate with y (row) then x (col)
 			skipStep := false
 			for _, items := range g.skipCord {
-				if items.row == int16(r) && items.col == int16(c) {
+				if items.row == int16(y) && items.col == int16(x) { // Corrected: check against y and x
 					skipStep = true
 					break
 				}
@@ -165,8 +164,8 @@ func (g *game) step() {
 				continue
 			}
 
-			alive := g.read.Coordinate(r, c)
-			neighbors := g.read.CountSurroundingLive(r, c)
+			alive := g.read.Coordinate(x, y)
+			neighbors := g.read.CountSurroundingLive(x, y)
 
 			newVal := alive
 			if alive && neighbors < 2 {
@@ -181,7 +180,7 @@ func (g *game) step() {
 			if !alive && neighbors == 3 {
 				newVal = true
 			}
-			g.write.SetCoordinate(r, c, newVal)
+			g.write.SetCoordinate(x, y, newVal) // Corrected: SetCoordinate(x, y)
 		}
 	}
 	g.read.CopyBoard(g.write.FlatSlice())
