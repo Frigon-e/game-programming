@@ -60,7 +60,7 @@ func (b *battleshipBoard) PlaceShip(x int, y int, shipType uint8, orientation ui
 	// Determine the length of the ship from the ship type
 	length := ShipLength(shipType)
 	if canPlace := b.CanPlace(x, y, length, orientation); !canPlace {
-		fmt.Println("Warning: cannot place ship at", x, y, "with length", length, "and orientation", orientation)
+		//fmt.Println("Warning: cannot place ship at", x, y, "with length", length, "and orientation", orientation)
 		return false
 	}
 	// Normalize orientation for simple handling

@@ -24,14 +24,14 @@ var (
 // This mirrors the Game of Life loop structure and prepares for separate User and AI boards.
 func Run(cfg config.AppConfig) error {
 	g := &game{
-		cellSize:     50,
-		stepEvery:    time.Millisecond * 100, // kept for consistency; not used yet for turn timing
-		rows:         cfg.BATTLESHIPHEIGHT,
-		cols:         cfg.BATTLESHIPWIDTH,
-		userBoard:    application.NewBattleshipBoard(cfg.BATTLESHIPWIDTH, cfg.BATTLESHIPHEIGHT),
-		aiBoard:      application.NewBattleshipBoard(cfg.BATTLESHIPWIDTH, cfg.BATTLESHIPHEIGHT),
-		isPlayerTurn: true,
-		ai:           application.NewHeatMapAI(cfg.BATTLESHIPWIDTH, cfg.BATTLESHIPHEIGHT),
+		cellSize:        50,
+		stepEvery:       time.Millisecond * 100, // kept for consistency; not used yet for turn timing
+		rows:            cfg.BATTLESHIPHEIGHT,
+		cols:            cfg.BATTLESHIPWIDTH,
+		aiSolutionBoard: application.NewBattleshipBoard(cfg.BATTLESHIPWIDTH, cfg.BATTLESHIPHEIGHT),
+		userBoard:       application.NewBattleshipBoard(cfg.BATTLESHIPWIDTH, cfg.BATTLESHIPHEIGHT),
+		aiViewBoard:     application.NewBattleshipBoard(cfg.BATTLESHIPWIDTH, cfg.BATTLESHIPHEIGHT),
+		isPlayerTurn:    true,
 	}
 
 	s, err := text.NewGoTextFaceSource(bytes.NewReader(fonts.MPlus1pRegular_ttf))
@@ -40,8 +40,10 @@ func Run(cfg config.AppConfig) error {
 	}
 	mplusFaceSource = s
 
-	g.aiBoard.SeedBoard()
-	g.aiBoard.PrintBoard()
+	g.userBoard.SeedBoard()
+	g.userBoard.PrintBoard()
+
+	g.aiSolutionBoard.SeedBoard()
 	// Layout: two boards stacked vertically with a gap
 	gap := 20
 	boardW := g.cols * g.cellSize
@@ -55,16 +57,16 @@ func Run(cfg config.AppConfig) error {
 }
 
 type game struct {
-	rows, cols   int
-	cellSize     int
-	stepEvery    time.Duration
-	lastStep     time.Time
-	userBoard    application.BattleshipBoard
-	aiBoard      application.BattleshipBoard
-	isPlayerTurn bool
-	ai           application.AI
-	gameOver     bool
-	winner       string
+	rows, cols      int
+	cellSize        int
+	stepEvery       time.Duration
+	lastStep        time.Time
+	userBoard       application.BattleshipBoard
+	aiSolutionBoard application.BattleshipBoard
+	aiViewBoard     application.BattleshipBoard
+	isPlayerTurn    bool
+	gameOver        bool
+	winner          string
 }
 
 func (g *game) Update() error {
@@ -113,10 +115,10 @@ func (g *game) Draw(screen *ebiten.Image) {
 	for x := 0; x < g.cols; x++ {
 		for y := 0; y < g.rows; y++ {
 			var chosenColor color.Color
-			cell := g.userBoard.Coordinate(x, y)
+			cell := g.aiSolutionBoard.Coordinate(x, y)
 			switch cell {
 			case application.Hit:
-				if g.userBoard.IsCellSunk(x, y) {
+				if g.aiSolutionBoard.IsCellSunk(x, y) {
 					chosenColor = sunkColor
 				} else {
 					chosenColor = hitColor
@@ -130,7 +132,7 @@ func (g *game) Draw(screen *ebiten.Image) {
 			yPix := y*cs + 1
 			vector.DrawFilledRect(screen, float32(xPix), float32(yPix), float32(cs-2), float32(cs-2), applyAlpha(chosenColor, userBoardAlpha), false)
 			// Draw X overlay for sunk cells
-			if cell == application.Hit && g.userBoard.IsCellSunk(x, y) {
+			if cell == application.Hit && g.aiSolutionBoard.IsCellSunk(x, y) {
 				lineCol := applyAlpha(color.RGBA{R: 255, G: 255, B: 255, A: 255}, userBoardAlpha)
 				x1 := float32(xPix + 2)
 				y1 := float32(yPix + 2)
@@ -148,10 +150,10 @@ func (g *game) Draw(screen *ebiten.Image) {
 	for x := 0; x < g.cols; x++ {
 		for y := 0; y < g.rows; y++ {
 			var chosenColor color.Color
-			cell := g.aiBoard.Coordinate(x, y)
+			cell := g.userBoard.Coordinate(x, y)
 			switch cell {
 			case application.Hit:
-				if g.aiBoard.IsCellSunk(x, y) {
+				if g.userBoard.IsCellSunk(x, y) {
 					chosenColor = sunkColor
 				} else {
 					chosenColor = hitColor
@@ -165,7 +167,7 @@ func (g *game) Draw(screen *ebiten.Image) {
 			yPix := offsetY + y*cs + 1
 			vector.DrawFilledRect(screen, float32(xPix), float32(yPix), float32(cs-2), float32(cs-2), applyAlpha(chosenColor, aiBoardAlpha), false)
 			// Draw X overlay for sunk cells
-			if cell == application.Hit && g.aiBoard.IsCellSunk(x, y) {
+			if cell == application.Hit && g.userBoard.IsCellSunk(x, y) {
 				lineCol := applyAlpha(color.RGBA{255, 255, 255, 255}, aiBoardAlpha)
 				x1 := float32(xPix + 2)
 				y1 := float32(yPix + 2)
@@ -226,7 +228,7 @@ func (g *game) handleClick() {
 			gridX := mouseX / cs
 			gridY := (mouseY - offsetY) / cs
 			// Toggle a placeholder shot state; hit simulation toggles true/false
-			hit, sunk, err := g.aiBoard.Attack(gridX, gridY)
+			hit, sunk, err := g.userBoard.Attack(gridX, gridY)
 
 			if err != nil {
 				fmt.Println("Error: ", err)
@@ -239,7 +241,7 @@ func (g *game) handleClick() {
 			}
 			if sunk {
 				fmt.Println("Sunk!")
-				if g.aiBoard.AllShipsSunk() {
+				if g.userBoard.AllShipsSunk() {
 					g.gameOver = true
 					g.winner = "Player"
 				}
@@ -254,21 +256,29 @@ func (g *game) step() {
 		return
 	}
 	time.Sleep(500 * time.Millisecond) // Add a small delay for the AI's turn
-	x, y := g.ai.TakeTurn(g.userBoard)
-	hit, sunk, err := g.userBoard.Attack(x, y)
+	x, y := application.TakeTurn(g.aiViewBoard)
+	hit, sunk, err := g.aiSolutionBoard.Attack(x, y)
+
 	if err != nil {
 		fmt.Println("AI error: ", err)
 		g.isPlayerTurn = true
 		return
 	}
+	if hit {
+		g.aiViewBoard.SetCoordinate(x, y, application.Hit)
+	} else {
+		g.aiViewBoard.SetCoordinate(x, y, application.Miss)
+	}
+
 	if sunk {
-		if g.userBoard.AllShipsSunk() {
+		if g.aiSolutionBoard.AllShipsSunk() {
 			g.gameOver = true
 			g.winner = "AI"
 			return
 		}
 	}
 	// After AI move, return control to player
-	g.isPlayerTurn = true
-	_ = hit // currently not used to control extra turns
+	if !hit {
+		g.isPlayerTurn = true
+	}
 }

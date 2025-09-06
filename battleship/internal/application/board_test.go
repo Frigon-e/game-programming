@@ -89,42 +89,54 @@ func TestAttack_Sunk(t *testing.T) {
 }
 
 // onePlayerGame simulates a single game of Battleship for the AI and returns the number of moves taken to win.
-func onePlayerGame(board BattleshipBoard) int {
-	board.SeedBoard() // Place ships randomly for a new game.
+func onePlayerGame() int {
+	// The "solutionBoard" knows where the ships are. The AI will attack this board.
+	solutionBoard := NewBattleshipBoard(10, 10)
+	solutionBoard.SeedBoard()
 
-	for moves := 1; moves <= board.Cols()*board.Rows(); moves++ {
-		x, y := TakeTurn(board)
+	// The "aiViewBoard" is what the AI "sees". It only contains Empty, Hit, or Miss.
+	// The AI uses this board to make its decisions.
+	aiViewBoard := NewBattleshipBoard(10, 10)
 
-		_, _, err := board.Attack(x, y)
-		println(x, y, err)
-		println(moves)
+	for moves := 1; moves <= solutionBoard.Cols()*solutionBoard.Rows(); moves++ {
+		// AI decides its move based on what it can see.
+		x, y := TakeTurn(aiViewBoard)
+
+		// The attack happens on the real board.
+		hit, _, err := solutionBoard.Attack(x, y)
 		if err != nil {
-			// This can happen if the AI guesses the same spot, so we just continue
+			// This can happen if the AI guesses the same spot.
+			// The AI logic should prevent this, but we continue just in case.
 			continue
 		}
 
-		if board.AllShipsSunk() {
+		// Update the AI's view of the board with the result of the attack.
+		if hit {
+			aiViewBoard.SetCoordinate(x, y, Hit)
+		} else {
+			aiViewBoard.SetCoordinate(x, y, Miss)
+		}
+
+		if solutionBoard.AllShipsSunk() {
 			return moves // Return the total moves taken to win.
 		}
 	}
-	return board.Cols() * board.Rows()
+	return solutionBoard.Cols() * solutionBoard.Rows()
 }
 
 // TestHeatMapAIAverage benchmarks the performance of the heatMapAI over many games.
 func TestHeatMapAIAverage(t *testing.T) {
-	numGames := 1 // Running 100 games for a decent sample size
+	numGames := 100_000 // Running 100 games for a decent sample size
 	results := make([]int, numGames)
 	totalMoves := 0
 	bestScore := 101
 	worstScore := 0
 
-	//ai := NewHeatMapAI(10, 10)
-	board := NewBattleshipBoard(10, 10)
-
 	startTime := time.Now()
 
 	for i := 0; i < numGames; i++ {
-		moves := onePlayerGame(board)
+		// onePlayerGame now creates its own boards, so we don't pass one in.
+		moves := onePlayerGame()
 		results[i] = moves
 		totalMoves += moves
 
@@ -133,6 +145,9 @@ func TestHeatMapAIAverage(t *testing.T) {
 		}
 		if moves > worstScore {
 			worstScore = moves
+		}
+		if i%10000 == 0 {
+			println(i)
 		}
 	}
 

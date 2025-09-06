@@ -54,7 +54,7 @@ func (b *board[T]) SetCoordinate(x int, y int, value T) {
 func (b *board[T]) PrintBoard() {
 	for y := 0; y < b.rows; y++ {
 		for x := 0; x < b.cols; x++ {
-			fmt.Print(b.Coordinate(x, y))
+			fmt.Print(" ", b.Coordinate(x, y), " ")
 		}
 		fmt.Println()
 	}
