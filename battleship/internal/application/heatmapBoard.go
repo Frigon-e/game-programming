@@ -1,6 +1,8 @@
 package application
 
-import "SideProjectGames/internal/ddd"
+import (
+	"SideProjectGames/internal/ddd"
+)
 
 type HeatmapBoard interface {
 	ddd.Board[int16]
@@ -29,31 +31,32 @@ func (hm *heatmapBoard) CalculateHeatmap(bsBoard BattleshipBoard) {
 	}
 
 	// 2. Determine which ships are still alive.
-	allShipTypes := []uint8{Carrier, Battleship, Cruiser, Submarine, Destroyer}
-	aliveShipLengths := []int{}
-	for _, shipType := range allShipTypes {
-		sunk, _ := bsBoard.IsShipSunk(shipType)
-		if !sunk {
-			aliveShipLengths = append(aliveShipLengths, ShipLength(shipType))
+	aliveShipLengths := []uint8{}
+	// Prefer using the sunk ships map directly to avoid any side effects or stale state from IsShipSunk.
+	for shipLength, isShipSunk := range bsBoard.SunkShips() {
+		if !isShipSunk {
+			aliveShipLengths = append(aliveShipLengths, uint8(ShipLength(shipLength)))
 		}
 	}
 
 	// 3. TARGET MODE: Calculate base probabilities.
 	// Iterate over every cell and every alive ship to see how many valid placements exist.
 	for _, length := range aliveShipLengths {
+		intShipLength := int(length)
 		for r := 0; r < hm.Rows(); r++ {
 			for c := 0; c < hm.Cols(); c++ {
+
 				// Horizontal check: Can a ship of this length be placed here horizontally?
-				if canPlaceShip(bsBoard, c, r, length, Horizontal) {
+				if canPlaceShip(bsBoard, c, r, intShipLength, Horizontal) {
 					// If yes, increment the heat for all cells this ship would occupy.
-					for i := 0; i < length; i++ {
+					for i := 0; i < intShipLength; i++ {
 						hm.SetCoordinate(c+i, r, hm.Coordinate(c+i, r)+1)
 					}
 				}
 				// Vertical check: Can a ship of this length be placed here vertically?
-				if canPlaceShip(bsBoard, c, r, length, Vertical) {
+				if canPlaceShip(bsBoard, c, r, intShipLength, Vertical) {
 					// If yes, increment the heat.
-					for i := 0; i < length; i++ {
+					for i := 0; i < intShipLength; i++ {
 						hm.SetCoordinate(c, r+i, hm.Coordinate(c, r+i)+1)
 					}
 				}
@@ -66,19 +69,45 @@ func (hm *heatmapBoard) CalculateHeatmap(bsBoard BattleshipBoard) {
 	for r := 0; r < hm.Rows(); r++ {
 		for c := 0; c < hm.Cols(); c++ {
 			if bsBoard.Coordinate(c, r) == Hit {
-				// Add a large bonus to adjacent squares to encourage "hunting."
-				// Ensure you don't add heat to spots that are already missed.
-				if r-1 >= 0 && bsBoard.Coordinate(c, r-1) == Empty {
-					hm.SetCoordinate(c, r-1, hm.Coordinate(c, r-1)+100)
+				// Check for adjacent hits to determine if we've found a line.
+
+				//isVerticalLine := (r > 0 && bsBoard.Coordinate(c, r-1) == Hit) || (r < hm.Rows()-1 && bsBoard.Coordinate(c, r+1) == Hit)
+				verticalBonus := int16(0)
+				if r > 0 && bsBoard.Coordinate(c, r-1) == Hit {
+					verticalBonus += 500
 				}
-				if r+1 < hm.Rows() && bsBoard.Coordinate(c, r+1) == Empty {
-					hm.SetCoordinate(c, r+1, hm.Coordinate(c, r+1)+100)
+				if r < hm.Rows()-1 && bsBoard.Coordinate(c, r+1) == Hit {
+					verticalBonus += 500
 				}
-				if c-1 >= 0 && bsBoard.Coordinate(c-1, r) == Empty {
-					hm.SetCoordinate(c-1, r, hm.Coordinate(c-1, r)+100)
+
+				//isHorizontalLine := (c > 0 && bsBoard.Coordinate(c-1, r) == Hit) || (c < hm.Cols()-1 && bsBoard.Coordinate(c+1, r) == Hit)
+				horizontalBonus := int16(0)
+				if c > 0 && bsBoard.Coordinate(c-1, r) == Hit {
+					horizontalBonus += 500
 				}
-				if c+1 < hm.Cols() && bsBoard.Coordinate(c+1, r) == Empty {
-					hm.SetCoordinate(c+1, r, hm.Coordinate(c+1, r)+100)
+				if c < hm.Cols()-1 && bsBoard.Coordinate(c+1, r) == Hit {
+					horizontalBonus += 500
+				}
+
+				// North neighbour
+				if r > 0 && bsBoard.Coordinate(c, r-1) == Empty {
+					bonus := int16(100) + verticalBonus
+					hm.SetCoordinate(c, r-1, hm.Coordinate(c, r-1)+bonus)
+				}
+				// South neighbour
+				if r < hm.Rows()-1 && bsBoard.Coordinate(c, r+1) == Empty {
+					bonus := int16(100) + verticalBonus
+					hm.SetCoordinate(c, r+1, hm.Coordinate(c, r+1)+bonus)
+				}
+				// West neighbour
+				if c > 0 && bsBoard.Coordinate(c-1, r) == Empty {
+					bonus := int16(100) + horizontalBonus
+					hm.SetCoordinate(c-1, r, hm.Coordinate(c-1, r)+bonus)
+				}
+				// East neighbour
+				if c < hm.Cols()-1 && bsBoard.Coordinate(c+1, r) == Empty {
+					bonus := int16(100) + horizontalBonus
+					hm.SetCoordinate(c+1, r, hm.Coordinate(c+1, r)+bonus)
 				}
 			}
 		}

@@ -1,6 +1,8 @@
 package application
 
-import "math/rand"
+import (
+	"math/rand"
+)
 
 // TakeTurn implements the AI interface, generating a move based on a heatmap.
 func TakeTurn(board BattleshipBoard) (x, y int) {
@@ -9,6 +11,8 @@ func TakeTurn(board BattleshipBoard) (x, y int) {
 
 	// 2. Calculate the heatmap based on the current state of the opponent's board.
 	heatMap.CalculateHeatmap(board)
+
+	//heatMap.PrintBoard()
 
 	// 3. Find the coordinate(s) with the highest "heat" that haven't been attacked yet.
 	var bestCoords [][2]int

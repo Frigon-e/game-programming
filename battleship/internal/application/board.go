@@ -12,11 +12,12 @@ const (
 	Empty      uint8 = 0
 	Hit        uint8 = 1
 	Miss       uint8 = 2
-	Carrier    uint8 = 3
-	Battleship uint8 = 4
-	Cruiser    uint8 = 5
-	Submarine  uint8 = 6
-	Destroyer  uint8 = 7
+	SUNK       uint8 = 3
+	Carrier    uint8 = 4
+	Battleship uint8 = 5
+	Cruiser    uint8 = 6
+	Submarine  uint8 = 7
+	Destroyer  uint8 = 8
 )
 
 const (
@@ -27,17 +28,21 @@ const (
 type BattleshipBoard interface {
 	ddd.Board[uint8]
 	SeedBoard()
-	Attack(x, y int) (hit, sunk bool, err error)
+	Attack(x, y int) (hit, sunk bool, shipType uint8, err error)
 	PlaceShip(x int, y int, shipType uint8, orientation uint8) bool
 	IsCellSunk(x, y int) bool
 	IsShipSunk(ship uint8) (sunk bool, err error)
 	AllShipsSunk() bool
+	RecordSunkShip(shipType uint8)
+	HitShipAt() map[[2]int]uint8
+	SunkShips() map[uint8]bool
+	CopyHitValues(otherBoard BattleshipBoard)
 }
 
 type battleshipBoard struct {
-	ddd.Board[uint8] // embed the generic board to reuse its methods
-	sunkShips        map[uint8]bool
-	hitShipAt        map[[2]int]uint8 // track which ship type was hit at a coordinate
+	ddd.Board[uint8]
+	sunkShips map[uint8]bool
+	hitShipAt map[[2]int]uint8
 }
 
 var _ BattleshipBoard = (*battleshipBoard)(nil)
@@ -56,6 +61,79 @@ func newBattleshipBoard(width int, height int) BattleshipBoard {
 	}, hitShipAt: make(map[[2]int]uint8)}
 }
 
+// **FIXED**: This function is now a safe, read-only check of the board's state.
+// It no longer modifies the board's data, preventing the bug.
+func (b *battleshipBoard) IsShipSunk(ship uint8) (sunk bool, err error) {
+	sunk = b.sunkShips[ship]
+	return sunk, nil
+}
+
+// **NEW**: This internal method contains the logic to scan the board and update the sunk status.
+// It is only called from within the Attack function.
+func (b *battleshipBoard) updateSunkStatus(ship uint8) (sunk bool, err error) {
+	// If already marked as sunk, no need to check again.
+	if b.sunkShips[ship] {
+		return true, nil
+	}
+	// Scan the board for any remaining pieces of the ship.
+	for _, item := range b.FlatSlice() {
+		if item == ship {
+			return false, nil // Found a piece, so it's not sunk.
+		}
+	}
+	// No pieces were found, so the ship is now sunk.
+	b.sunkShips[ship] = true
+	return true, nil
+}
+
+func (b *battleshipBoard) CopyHitValues(otherBoard BattleshipBoard) {
+	for rows := 0; rows < otherBoard.Rows(); rows++ {
+		for cols := 0; cols < otherBoard.Cols(); cols++ {
+			if b.Coordinate(rows, cols) <= 3 {
+				b.SetCoordinate(rows, cols, otherBoard.Coordinate(rows, cols))
+			}
+		}
+	}
+}
+
+func (b *battleshipBoard) Attack(x, y int) (hit, sunk bool, shipType uint8, err error) {
+	currentValue := b.Coordinate(x, y)
+	if currentValue == Hit || currentValue == Miss {
+		return false, false, 0, errors.New("already hit or missed at this location")
+	}
+	if currentValue == Empty {
+		b.SetCoordinate(x, y, Miss)
+		return false, false, 0, nil
+	}
+
+	b.hitShipAt[[2]int{x, y}] = currentValue
+	b.SetCoordinate(x, y, Hit)
+
+	// Check if this hit caused the ship to sink.
+	sunk, err = b.updateSunkStatus(currentValue)
+	if err != nil {
+		return false, false, 0, err
+	}
+
+	// If the ship is sunk, update all its hit cells to the SUNK state.
+	if sunk {
+		for coord, ship := range b.hitShipAt {
+			if ship == currentValue {
+				b.SetCoordinate(coord[0], coord[1], SUNK)
+			}
+		}
+	}
+
+	return true, sunk, currentValue, nil
+}
+
+func (b *battleshipBoard) RecordSunkShip(shipType uint8) {
+	if _, ok := b.sunkShips[shipType]; ok {
+		b.sunkShips[shipType] = true
+	}
+}
+
+// ... (The rest of the file remains the same) ...
 func (b *battleshipBoard) PlaceShip(x int, y int, shipType uint8, orientation uint8) bool {
 	// Determine the length of the ship from the ship type
 	length := ShipLength(shipType)
@@ -101,11 +179,7 @@ func (b *battleshipBoard) SeedBoard() {
 	}
 	// reset sunkShips and hitShipAt tracking
 	b.sunkShips = map[uint8]bool{
-		Carrier:    false,
-		Battleship: false,
-		Cruiser:    false,
-		Submarine:  false,
-		Destroyer:  false,
+		Carrier: false, Battleship: false, Cruiser: false, Submarine: false, Destroyer: false,
 	}
 	if b.hitShipAt == nil {
 		b.hitShipAt = make(map[[2]int]uint8)
@@ -121,13 +195,11 @@ func (b *battleshipBoard) SeedBoard() {
 		placed := false
 		// try up to a reasonable number of attempts
 		for attempts := 0; attempts < 1000 && !placed; attempts++ {
-			orientation := uint8(r.Intn(2)) // 0 horizontal, 1 vertical
+			orientation := uint8(r.Intn(2))
 			var x, y int
 			x = rand.Intn(b.Cols())
 			y = rand.Intn(b.Rows())
-
 			placed = b.PlaceShip(x, y, shipType, orientation)
-
 		}
 		if !placed {
 			fmt.Println("Warning: could not place ship type", shipType)
@@ -136,8 +208,8 @@ func (b *battleshipBoard) SeedBoard() {
 }
 
 func (b *battleshipBoard) CanPlace(x, y, length int, orientation uint8) bool {
-	if orientation == Horizontal { // horizontal
-		if x+length >= b.Cols() {
+	if orientation == Horizontal {
+		if x+length > b.Cols() {
 			return false
 		}
 		for i := 0; i < length; i++ {
@@ -146,7 +218,7 @@ func (b *battleshipBoard) CanPlace(x, y, length int, orientation uint8) bool {
 			}
 		}
 	} else if orientation == Vertical {
-		if y+length >= b.Rows() {
+		if y+length > b.Rows() {
 			return false
 		}
 		for i := 0; i < length; i++ {
@@ -156,39 +228,6 @@ func (b *battleshipBoard) CanPlace(x, y, length int, orientation uint8) bool {
 		}
 	}
 	return true
-}
-
-func (b *battleshipBoard) IsShipSunk(ship uint8) (sunk bool, err error) {
-	if b.sunkShips[ship] {
-		return true, nil
-	}
-	for _, item := range b.FlatSlice() {
-		if item == ship {
-			return false, nil
-		}
-	}
-	b.sunkShips[ship] = true
-	return true, nil
-
-}
-
-func (b *battleshipBoard) Attack(x, y int) (hit, sunk bool, err error) {
-	currentValue := b.Coordinate(x, y)
-	if currentValue == Hit || currentValue == Miss {
-		return false, false, errors.New("already hit or missed at this location")
-	}
-	if currentValue == Empty {
-		b.SetCoordinate(x, y, Miss)
-		return false, false, nil
-	}
-	// record which ship type was hit at this location before overwriting the cell value
-	b.hitShipAt[[2]int{x, y}] = currentValue
-	b.SetCoordinate(x, y, Hit)
-	sunk, err = b.IsShipSunk(currentValue)
-	if err != nil {
-		return false, false, err
-	}
-	return true, sunk, nil
 }
 
 func ShipLength(shipType uint8) int {
@@ -209,13 +248,13 @@ func ShipLength(shipType uint8) int {
 }
 
 func (b *battleshipBoard) IsCellSunk(x, y int) bool {
-	// Only a hit cell can be considered for sunk visualization
-	if b.Coordinate(x, y) != Hit {
+	coordState := b.Coordinate(x, y)
+	if coordState != Hit && coordState != SUNK {
 		return false
 	}
 	ship, ok := b.hitShipAt[[2]int{x, y}]
 	if !ok {
-		return false
+		return coordState == SUNK
 	}
 	sunk, _ := b.IsShipSunk(ship)
 	return sunk
@@ -230,4 +269,12 @@ func (b *battleshipBoard) AllShipsSunk() bool {
 		}
 	}
 	return true
+}
+
+func (b *battleshipBoard) SunkShips() map[uint8]bool {
+	return b.sunkShips
+}
+
+func (b *battleshipBoard) HitShipAt() map[[2]int]uint8 {
+	return b.hitShipAt
 }

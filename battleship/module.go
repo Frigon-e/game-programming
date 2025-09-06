@@ -81,11 +81,6 @@ func (g *game) Update() error {
 	return nil
 }
 
-func applyAlpha(c color.Color, alpha uint8) color.Color {
-	r, g, b, _ := c.RGBA()
-	return color.RGBA{R: uint8(r >> 8), G: uint8(g >> 8), B: uint8(b >> 8), A: alpha}
-}
-
 func (g *game) Draw(screen *ebiten.Image) {
 	// Colors
 	bgColor := color.RGBA{R: 20, G: 30, B: 40, A: 255}
@@ -132,7 +127,7 @@ func (g *game) Draw(screen *ebiten.Image) {
 			yPix := y*cs + 1
 			vector.DrawFilledRect(screen, float32(xPix), float32(yPix), float32(cs-2), float32(cs-2), applyAlpha(chosenColor, userBoardAlpha), false)
 			// Draw X overlay for sunk cells
-			if cell == application.Hit && g.aiSolutionBoard.IsCellSunk(x, y) {
+			if cell == application.SUNK {
 				lineCol := applyAlpha(color.RGBA{R: 255, G: 255, B: 255, A: 255}, userBoardAlpha)
 				x1 := float32(xPix + 2)
 				y1 := float32(yPix + 2)
@@ -152,7 +147,7 @@ func (g *game) Draw(screen *ebiten.Image) {
 			var chosenColor color.Color
 			cell := g.userBoard.Coordinate(x, y)
 			switch cell {
-			case application.Hit:
+			case application.Hit, application.SUNK:
 				if g.userBoard.IsCellSunk(x, y) {
 					chosenColor = sunkColor
 				} else {
@@ -167,8 +162,8 @@ func (g *game) Draw(screen *ebiten.Image) {
 			yPix := offsetY + y*cs + 1
 			vector.DrawFilledRect(screen, float32(xPix), float32(yPix), float32(cs-2), float32(cs-2), applyAlpha(chosenColor, aiBoardAlpha), false)
 			// Draw X overlay for sunk cells
-			if cell == application.Hit && g.userBoard.IsCellSunk(x, y) {
-				lineCol := applyAlpha(color.RGBA{255, 255, 255, 255}, aiBoardAlpha)
+			if cell == application.SUNK {
+				lineCol := applyAlpha(color.RGBA{R: 255, G: 255, B: 255, A: 255}, aiBoardAlpha)
 				x1 := float32(xPix + 2)
 				y1 := float32(yPix + 2)
 				x2 := float32(xPix + cs - 3)
@@ -228,23 +223,17 @@ func (g *game) handleClick() {
 			gridX := mouseX / cs
 			gridY := (mouseY - offsetY) / cs
 			// Toggle a placeholder shot state; hit simulation toggles true/false
-			hit, sunk, err := g.userBoard.Attack(gridX, gridY)
-
+			hit, sunk, _, err := g.userBoard.Attack(gridX, gridY)
 			if err != nil {
-				fmt.Println("Error: ", err)
-			} else if !hit {
+				return // Already clicked here
+			}
+			if !hit {
 				g.isPlayerTurn = false
+				g.lastStep = time.Now()
 			}
-
-			if hit {
-				fmt.Println("Hit!")
-			}
-			if sunk {
-				fmt.Println("Sunk!")
-				if g.userBoard.AllShipsSunk() {
-					g.gameOver = true
-					g.winner = "Player"
-				}
+			if sunk && g.userBoard.AllShipsSunk() {
+				g.gameOver = true
+				g.winner = "Player"
 			}
 
 		}
@@ -257,7 +246,7 @@ func (g *game) step() {
 	}
 	time.Sleep(500 * time.Millisecond) // Add a small delay for the AI's turn
 	x, y := application.TakeTurn(g.aiViewBoard)
-	hit, sunk, err := g.aiSolutionBoard.Attack(x, y)
+	hit, sunk, shipType, err := g.aiSolutionBoard.Attack(x, y)
 
 	if err != nil {
 		fmt.Println("AI error: ", err)
@@ -271,14 +260,28 @@ func (g *game) step() {
 	}
 
 	if sunk {
+		g.aiViewBoard.RecordSunkShip(shipType)
+		g.aiSolutionBoard.RecordSunkShip(shipType)
+		g.aiViewBoard.CopyHitValues(g.aiSolutionBoard)
+
+		for ints, element := range g.aiSolutionBoard.HitShipAt() {
+			if element == shipType {
+				g.aiViewBoard.SetCoordinate(ints[0], ints[1], application.SUNK)
+			}
+		}
 		if g.aiSolutionBoard.AllShipsSunk() {
 			g.gameOver = true
 			g.winner = "AI"
-			return
 		}
 	}
+
 	// After AI move, return control to player
 	if !hit {
 		g.isPlayerTurn = true
 	}
+}
+
+func applyAlpha(c color.Color, alpha uint8) color.Color {
+	r, g, b, _ := c.RGBA()
+	return color.RGBA{R: uint8(r >> 8), G: uint8(g >> 8), B: uint8(b >> 8), A: alpha}
 }

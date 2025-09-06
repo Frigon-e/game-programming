@@ -10,7 +10,7 @@ func TestAttack_Hit(t *testing.T) {
 	board := newBattleshipBoard(10, 10)
 	board.PlaceShip(0, 0, Destroyer, Horizontal)
 
-	hit, sunk, err := board.Attack(0, 0)
+	hit, sunk, _, err := board.Attack(0, 0)
 
 	if err != nil {
 		t.Errorf("Expected no error, but got %v", err)
@@ -29,7 +29,7 @@ func TestAttack_Hit(t *testing.T) {
 func TestAttack_Miss(t *testing.T) {
 	board := newBattleshipBoard(10, 10)
 
-	hit, sunk, err := board.Attack(0, 0)
+	hit, sunk, _, err := board.Attack(0, 0)
 
 	if err != nil {
 		t.Errorf("Expected no error, but got %v", err)
@@ -48,12 +48,12 @@ func TestAttack_Miss(t *testing.T) {
 func TestAttack_Invalid(t *testing.T) {
 	board := newBattleshipBoard(10, 10)
 
-	_, _, err2 := board.Attack(0, 0)
+	_, _, _, err2 := board.Attack(0, 0)
 	if err2 != nil {
 		return
 	}
 
-	hit, sunk, err := board.Attack(0, 0) // Second attack on the same cell
+	hit, sunk, _, err := board.Attack(0, 0) // Second attack on the same cell
 
 	if err == nil {
 		t.Error("Expected an error, but got nil")
@@ -70,12 +70,12 @@ func TestAttack_Sunk(t *testing.T) {
 	board := newBattleshipBoard(10, 10)
 	board.PlaceShip(0, 0, Destroyer, Horizontal) // Destroyer has length 2
 
-	_, _, err2 := board.Attack(0, 0)
+	_, _, _, err2 := board.Attack(0, 0)
 	if err2 != nil {
 		return
 	}
 
-	hit, sunk, err := board.Attack(1, 0)
+	hit, sunk, _, err := board.Attack(1, 0)
 
 	if err != nil {
 		t.Errorf("Expected no error, but got %v", err)
@@ -103,7 +103,7 @@ func onePlayerGame() int {
 		x, y := TakeTurn(aiViewBoard)
 
 		// The attack happens on the real board.
-		hit, _, err := solutionBoard.Attack(x, y)
+		hit, _, _, err := solutionBoard.Attack(x, y)
 		if err != nil {
 			// This can happen if the AI guesses the same spot.
 			// The AI logic should prevent this, but we continue just in case.
