@@ -14,32 +14,33 @@ func TakeTurn(board BattleshipBoard) (x, y int) {
 
 	//heatMap.PrintBoard()
 
-	// 3. Find the coordinate(s) with the highest "heat" that haven't been attacked yet.
-	var bestCoords [][2]int
-	var maxHeat int16 = -1
+	// 3. Find the coordinate(s) with the highest "heat" that hasn't been attacked yet.
+	bestCoords := heatMap.GetBestCoords(board)
 
-	for y := 0; y < board.Rows(); y++ {
-		for x := 0; x < board.Cols(); x++ {
-			// We only consider empty cells as potential targets.
-			if board.Coordinate(x, y) == Empty {
-				currentHeat := heatMap.Coordinate(x, y)
-				if currentHeat > maxHeat {
-					maxHeat = currentHeat
-					bestCoords = [][2]int{{x, y}} // Start a new list of best coordinates
-				} else if currentHeat == maxHeat {
-					bestCoords = append(bestCoords, [2]int{x, y}) // Add to the list of best coordinates
-				}
+	// 4. If there is a tiebreaker make sure to implement the code
+	newBestCoords := make([][2]int, 0, len(bestCoords))
+	var maxHeat int16 = -1
+	if len(bestCoords) >= 2 {
+		for _, coord := range bestCoords {
+			currentHeat := heatMap.SumNeighbours(coord[0], coord[1])
+			if currentHeat > maxHeat {
+				maxHeat = currentHeat
+				newBestCoords = [][2]int{{coord[0], coord[1]}} // Start a new list of best coordinates
+			} else if currentHeat == maxHeat {
+				newBestCoords = append(newBestCoords, [2]int{coord[0], coord[1]}) // Add to the list of best coordinates
 			}
 		}
+	} else if len(bestCoords) == 1 {
+		return bestCoords[0][0], bestCoords[0][1]
 	}
 
-	// 4. If high-value targets are found, pick one at random from the best options.
-	if len(bestCoords) > 0 {
-		choice := rand.Intn(len(bestCoords))
-		return bestCoords[choice][0], bestCoords[choice][1]
+	// 5. If high-value targets are found, use it
+	if len(newBestCoords) > 0 {
+		choice := rand.Intn(len(newBestCoords))
+		return newBestCoords[choice][0], newBestCoords[choice][1]
 	}
 
-	// 5. If no high-value targets are found (e.g., on the first turn),
+	// 6. If no high-value targets are found (e.g., on the first turn),
 	// pick a random valid spot as a fallback.
 	for {
 		randX := rand.Intn(board.Cols())

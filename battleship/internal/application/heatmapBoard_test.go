@@ -85,3 +85,53 @@ func TestCalculateHeatmap_HuntModeAddsHeatEvenIfAllSunk(t *testing.T) {
 		t.Fatalf("expected non-zero heat due to hunt mode bonuses around a hit, got total=%d", total)
 	}
 }
+
+func TestTakeTurn_TiebreakerBySumSurrounding(t *testing.T) {
+	// 1. Arrange
+	// Create a board state that will result in a tie between multiple coordinates.
+	// We want to ensure that the tie-breaking logic, which uses the sum of
+	// surrounding heat, correctly picks the best spot.
+	board := NewBattleshipBoard(10, 10)
+
+	// Place two separate hits to create two hotspots with equally valuable targets.
+	board.SetCoordinate(1, 1, Hit)
+	board.SetCoordinate(8, 8, Hit)
+
+	// Now, create an asymmetry to test the tie-breaker. We'll place a 'Miss'
+	// near one hotspot. This reduces the sum of neighboring heat for that spot,
+	// making it less attractive after the tie-breaker logic is applied.
+	board.SetCoordinate(0, 3, Miss)
+	board.SetCoordinate(3, 0, Miss)
+
+	// 2. Act
+	x, y := TakeTurn(board)
+
+	// 3. Assert
+	// This is where it should hit if it's working properly
+	expectedWinnerCoords := [][2]int{
+		{7, 8}, {9, 8}, {8, 7}, {8, 9},
+	}
+
+	isWinner := false
+	for _, coord := range expectedWinnerCoords {
+		if x == coord[0] && y == coord[1] {
+			isWinner = true
+			break
+		}
+	}
+
+	if !isWinner {
+		t.Errorf("TakeTurn() chose (%d, %d), which was not in the expected set of winning coordinates %v", x, y, expectedWinnerCoords)
+	}
+
+	// These show that it doesn't work and it's not adding properly
+	losingCoords := [][2]int{
+		{1, 0}, {0, 1}, {2, 1}, {1, 2},
+	}
+
+	for _, coord := range losingCoords {
+		if x == coord[0] && y == coord[1] {
+			t.Errorf("TakeTurn() chose (%d, %d), which should have been eliminated by the tie-breaker", x, y)
+		}
+	}
+}

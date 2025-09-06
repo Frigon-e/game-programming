@@ -2,6 +2,7 @@ package application
 
 import (
 	"sort"
+	"sync"
 	"testing"
 	"time"
 )
@@ -98,12 +99,12 @@ func onePlayerGame() int {
 	// The AI uses this board to make its decisions.
 	aiViewBoard := NewBattleshipBoard(10, 10)
 
-	for moves := 1; moves <= solutionBoard.Cols()*solutionBoard.Rows(); moves++ {
+	for moves := 1; moves <= ((solutionBoard.Cols() * solutionBoard.Rows()) * 2); moves++ {
 		// AI decides its move based on what it can see.
 		x, y := TakeTurn(aiViewBoard)
 
 		// The attack happens on the real board.
-		hit, _, _, err := solutionBoard.Attack(x, y)
+		hit, sunk, shipType, err := solutionBoard.Attack(x, y)
 		if err != nil {
 			// This can happen if the AI guesses the same spot.
 			// The AI logic should prevent this, but we continue just in case.
@@ -117,7 +118,40 @@ func onePlayerGame() int {
 			aiViewBoard.SetCoordinate(x, y, Miss)
 		}
 
+		if sunk {
+			aiViewBoard.RecordSunkShip(shipType)
+			solutionBoard.RecordSunkShip(shipType)
+			//aiViewBoard.CopyHitValues(solutionBoard)
+
+			for ints, element := range solutionBoard.HitShipAt() {
+				if element == shipType {
+					aiViewBoard.SetCoordinate(ints[0], ints[1], SUNK)
+				}
+			}
+		}
+
 		if solutionBoard.AllShipsSunk() {
+			/*
+				if moves > 90 {
+					fmt.Println()
+					fmt.Println()
+					fmt.Println()
+					fmt.Println()
+					fmt.Println()
+					fmt.Println()
+					heatMap := NewHeatmapBoard(aiViewBoard.Cols(), aiViewBoard.Rows())
+
+					// 2. Calculate the heatmap based on the current state of the opponent's board.
+					heatMap.CalculateHeatmap(aiViewBoard)
+					heatMap.PrintBoard()
+					fmt.Println()
+					aiViewBoard.PrintBoard()
+					fmt.Println()
+					solutionBoard.PrintBoard()
+					fmt.Println(aiViewBoard.SunkShips())
+					fmt.Println(solutionBoard.SunkShips())
+				}
+			*/
 			return moves // Return the total moves taken to win.
 		}
 	}
@@ -126,33 +160,48 @@ func onePlayerGame() int {
 
 // TestHeatMapAIAverage benchmarks the performance of the heatMapAI over many games.
 func TestHeatMapAIAverage(t *testing.T) {
-	numGames := 100_000 // Running 100 games for a decent sample size
-	results := make([]int, numGames)
+	t.Parallel() // Mark this test to run in parallel.
+
+	numGames := 100_000
+	resultsChan := make(chan int, numGames)
+	var wg sync.WaitGroup
+
+	startTime := time.Now()
+
+	// Launch a goroutine for each game.
+	for i := 0; i < numGames; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			moves := onePlayerGame()
+			resultsChan <- moves
+		}()
+	}
+
+	// Wait for all games to finish, then close the channel.
+	wg.Wait()
+	close(resultsChan)
+
+	// Collect results from the channel.
+	results := make([]int, 0, numGames)
 	totalMoves := 0
 	bestScore := 101
 	worstScore := 0
 
-	startTime := time.Now()
-
-	for i := 0; i < numGames; i++ {
-		// onePlayerGame now creates its own boards, so we don't pass one in.
-		moves := onePlayerGame()
-		results[i] = moves
+	for moves := range resultsChan {
+		results = append(results, moves)
 		totalMoves += moves
-
 		if moves < bestScore {
 			bestScore = moves
 		}
 		if moves > worstScore {
 			worstScore = moves
 		}
-		if i%10000 == 0 {
-			println(i)
-		}
 	}
 
 	duration := time.Since(startTime)
 
+	// --- The rest of the logic remains the same ---
 	sort.Ints(results)
 	var median float64
 	if numGames%2 == 0 {
@@ -167,4 +216,52 @@ func TestHeatMapAIAverage(t *testing.T) {
 	t.Logf("Best score: %d", bestScore)
 	t.Logf("Worst score: %d", worstScore)
 	t.Logf("Median score: %.2f", median)
+}
+
+func TestHeatMapAIResponseTime(t *testing.T) {
+	numGames := 10_000 // Reduced number of games for a quicker test run
+	totalDuration := time.Duration(0)
+	totalMoves := 0
+
+	startTime := time.Now()
+
+	for i := 0; i < numGames; i++ {
+		solutionBoard := NewBattleshipBoard(10, 10)
+		solutionBoard.SeedBoard()
+		aiViewBoard := NewBattleshipBoard(10, 10)
+
+		for moves := 1; moves <= solutionBoard.Cols()*solutionBoard.Rows(); moves++ {
+			aiMoveStart := time.Now()
+			x, y := TakeTurn(aiViewBoard)
+			aiMoveDuration := time.Since(aiMoveStart)
+			totalDuration += aiMoveDuration
+			totalMoves++
+
+			hit, _, _, err := solutionBoard.Attack(x, y)
+			if err != nil {
+				continue
+			}
+
+			if hit {
+				aiViewBoard.SetCoordinate(x, y, Hit)
+			} else {
+				aiViewBoard.SetCoordinate(x, y, Miss)
+			}
+
+			if solutionBoard.AllShipsSunk() {
+				break
+			}
+		}
+		if i%100 == 0 {
+			println(i)
+		}
+	}
+
+	duration := time.Since(startTime)
+	averageResponseTime := totalDuration / time.Duration(totalMoves)
+
+	// Log the formatted results of the benchmark.
+	t.Logf("Simulation finished for %d games in %v", numGames, duration)
+	t.Logf("Total AI moves: %d", totalMoves)
+	t.Logf("Average AI response time: %v", averageResponseTime)
 }

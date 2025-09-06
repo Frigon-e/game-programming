@@ -262,7 +262,7 @@ func (g *game) step() {
 	if sunk {
 		g.aiViewBoard.RecordSunkShip(shipType)
 		g.aiSolutionBoard.RecordSunkShip(shipType)
-		g.aiViewBoard.CopyHitValues(g.aiSolutionBoard)
+		//g.aiViewBoard.CopyHitValues(g.aiSolutionBoard)
 
 		for ints, element := range g.aiSolutionBoard.HitShipAt() {
 			if element == shipType {

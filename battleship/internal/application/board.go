@@ -128,7 +128,7 @@ func (b *battleshipBoard) Attack(x, y int) (hit, sunk bool, shipType uint8, err 
 }
 
 func (b *battleshipBoard) RecordSunkShip(shipType uint8) {
-	if _, ok := b.sunkShips[shipType]; ok {
+	if _, ok := b.sunkShips[shipType]; !ok {
 		b.sunkShips[shipType] = true
 	}
 }
